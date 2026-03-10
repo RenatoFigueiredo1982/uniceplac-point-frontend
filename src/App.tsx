@@ -19,7 +19,7 @@ import {
   Search, FileText, Sparkles, Loader2, Book, LogIn,
   MapPin, Plus, X, Edit, Trash2, Camera, User,
   Calendar, Hash, Mail, Filter, RefreshCw, Download,
-  ChevronDown, ChevronUp, Brain, LayoutDashboard
+  ChevronDown, ChevronUp, Brain, LayoutDashboard, GraduationCap
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -28,14 +28,43 @@ import { Documentation } from './components/Documentation';
 
 // --- TYPES ---
 type Role = 'GESTOR' | 'STAFF' | 'ALUNO';
+type Periodo = '8' | '9' | '10' | '11' | '12';
 type View = 'LOGIN' | 'ADMIN' | 'STAFF' | 'STUDENT_LOGIN' | 'STUDENT_SCAN' | 'DOCUMENTATION';
 
 interface User { id: string; nome: string; email: string; role: Role; }
-interface Aluno { id: string; nome: string; matricula: string; turma: string; carga_horaria_alvo: number; horas_concluidas: number; }
+interface Aluno { 
+  id: string; 
+  nome: string; 
+  matricula: string; 
+  email: string;
+  periodo: Periodo;
+  turma: string; 
+  carga_horaria_alvo: number; 
+  horas_concluidas: number; 
+}
 interface Escala { id: string; aluno_id: string; aluno_nome: string; staff_id: string; staff_nome: string; cnes: string; hospital: string; setor: string; data: string; periodo: string; carga_horaria: number; }
-interface Staff { id: string; nome: string; email: string; }
+interface Staff { id: string; nome: string; email: string; cnesVinculado: string; }
 interface Setor { id: string; nome: string; hospital: string; cnes: string; ativo: boolean; }
-interface PontoRecord { id: string; aluno_nome: string; aluno_matricula: string; setor: string; data_plantao: string; hora_entrada: string; hora_saida: string | null; horas_totais: number | null; staff_entrada_nome: string; staff_saida_nome: string | null; is_sos_entrada: boolean; is_sos_saida: boolean; observacao: string | null; }
+interface PontoRecord { 
+  id: string; 
+  aluno_id: string;
+  aluno_nome: string; 
+  aluno_matricula: string;
+  aluno_periodo: string;
+  setor: string; 
+  hospital: string;
+  data_plantao: string; 
+  hora_entrada: string; 
+  hora_saida: string | null; 
+  horas_totais: number | null; 
+  staff_entrada_id: string;
+  staff_entrada_nome: string; 
+  staff_saida_id: string | null;
+  staff_saida_nome: string | null; 
+  is_sos_entrada: boolean; 
+  is_sos_saida: boolean; 
+  observacao: string | null; 
+}
 
 interface EscalaInput {
   matricula: string;
@@ -74,10 +103,10 @@ const Button = ({ children, onClick, variant = 'primary', className = "", disabl
 };
 
 // ============================================================================
-// COMPONENTE DE LOGIN DO ALUNO (APENAS CADASTRADOS)
+// COMPONENTE DE LOGIN DO ALUNO (COM EMAIL INSTITUCIONAL)
 // ============================================================================
 const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) => void; onBack: () => void }) => {
-  const [matricula, setMatricula] = useState('');
+  const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -87,19 +116,21 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
     setError('');
 
     try {
-      // Buscar aluno no banco
-      const q = query(collection(db, "Alunos"), where("matricula", "==", matricula));
+      // Buscar aluno por email
+      const q = query(collection(db, "Alunos"), where("email", "==", email));
       const snap = await getDocs(q);
       
       if (!snap.empty) {
         const alunoData = snap.docs[0].data();
         onLoginSuccess({ 
+          id: snap.docs[0].id,
           nome: alunoData.nome, 
           matricula: alunoData.matricula,
-          id: snap.docs[0].id 
+          email: alunoData.email,
+          periodo: alunoData.periodo
         });
       } else {
-        setError('Matrícula não encontrada. Procure o gestor para se cadastrar.');
+        setError('Email não encontrado. Procure o gestor para se cadastrar.');
       }
     } catch (err) {
       setError('Erro ao fazer login');
@@ -117,12 +148,12 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Matrícula</label>
+            <label className="block text-sm font-medium text-zinc-700 mb-1">Email Institucional</label>
             <input
-              type="text"
-              value={matricula}
-              onChange={(e) => setMatricula(e.target.value)}
-              placeholder="Digite sua matrícula"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="exemplo@uniceplac.edu.br"
               required
               className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-uniceplac-green/20"
             />
@@ -154,8 +185,9 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
     </div>
   );
 };
+
 // ============================================================================
-// COMPONENTE DE SCANNER DO ALUNO (CORRIGIDO PARA CELULAR)
+// COMPONENTE DE SCANNER DO ALUNO (CORRIGIDO PARA MOBILE)
 // ============================================================================
 const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: () => void }) => {
   const [scanned, setScanned] = useState(false);
@@ -183,19 +215,18 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
       try {
         // Configurações específicas para mobile
         const config: any = {
-          fps: 10,
+          fps: isMobile ? 5 : 10,
           qrbox: { width: 250, height: 250 },
           rememberLastUsedCamera: true,
           showTorchButtonIfSupported: true,
           aspectRatio: 1.0
         };
 
-        // No celular, forçar câmera traseira e configurações específicas
+        // No celular, forçar câmera traseira
         if (isMobile) {
           config.videoConstraints = {
             facingMode: { exact: "environment" }
           };
-          config.fps = 5; // Reduzir FPS para melhor performance no celular
         }
 
         const scanner = new Html5QrcodeScanner("reader", config, false);
@@ -247,10 +278,12 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          aluno_id: studentData.id,
           aluno_matricula: studentData.matricula,
           aluno_nome: studentData.nome,
+          aluno_periodo: studentData.periodo,
           staff_id: qrData.staff_id,
-          setor: qrData.setor || qrData.especialidade,
+          setor: qrData.especialidade,
           hospital: qrData.hospital,
           token_seguranca_qr: qrData.token,
           is_sos: false
@@ -258,9 +291,18 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
       });
       
       const data = await response.json();
-      setResult(data);
+      
+      // Buscar horas atualizadas do aluno
+      const alunoRef = doc(db, "Alunos", studentData.id);
+      const alunoSnap = await getDocs(query(collection(db, "Alunos"), where("id", "==", studentData.id)));
+      
+      setResult({
+        ...data,
+        horas_concluidas: data.horas_concluidas || studentData.horas_concluidas
+      });
       setPontoRegistrado(true);
     } catch (err) {
+      console.error('Erro ao registrar ponto:', err);
       setResult({ error: 'Erro de conexão com o servidor' });
     } finally {
       setLoading(false);
@@ -341,9 +383,10 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
         </Button>
       </header>
       
-      <div className="mb-4 p-4 bg-uniceplac-green/5 rounded-lg text-center">
+      <div className="mb-4 p-4 bg-uniceplac-green/5 rounded-lg">
         <p className="font-medium text-uniceplac-green">{studentData.nome}</p>
         <p className="text-sm text-zinc-500">Matrícula: {studentData.matricula}</p>
+        <p className="text-sm text-zinc-500">Período: {studentData.periodo}º</p>
       </div>
 
       {!pontoRegistrado ? (
@@ -359,7 +402,7 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
           </p>
           {isMobile && (
             <p className="text-center text-xs text-amber-600 mt-2">
-              📱 No celular, aproxime bem o QR Code da câmera
+              📱 Aproxime bem o QR Code da câmera
             </p>
           )}
         </div>
@@ -383,14 +426,35 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
             {result?.tipo === 'SAIDA' ? 'Saída Registrada!' : 'Entrada Registrada!'}
           </p>
           <p className="text-sm text-zinc-600 mt-2">{result?.message}</p>
-          {result?.horas && (
-            <p className="text-sm font-bold text-uniceplac-green mt-2">Total: {result.horas}h</p>
-          )}
+          
+          <div className="mt-6 p-4 bg-zinc-50 rounded-xl">
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-zinc-500">Data:</span>
+              <span className="font-medium">{new Date().toLocaleDateString('pt-BR')}</span>
+            </div>
+            <div className="flex justify-between text-sm mb-2">
+              <span className="text-zinc-500">Horário:</span>
+              <span className="font-medium">{new Date().toLocaleTimeString('pt-BR')}</span>
+            </div>
+            {result?.horas && (
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-zinc-500">Horas no plantão:</span>
+                <span className="font-bold text-uniceplac-green">{result.horas}h</span>
+              </div>
+            )}
+            <div className="flex justify-between text-sm pt-2 border-t mt-2">
+              <span className="text-zinc-500">Total acumulado:</span>
+              <span className="font-bold text-uniceplac-green">
+                {result?.horas_concluidas || studentData.horas_concluidas || 0}h / {studentData.carga_horaria_alvo || 120}h
+              </span>
+            </div>
+          </div>
+          
           <div className="flex gap-3 mt-6">
             <Button onClick={novoRegistro} className="flex-1">
               Novo Registro
             </Button>
-            <Button onClick={onLogout} variant="outline" className="flex-1">
+            <Button variant="outline" onClick={onLogout} className="flex-1">
               Sair
             </Button>
           </div>
@@ -399,6 +463,7 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
     </div>
   );
 };
+
 // ============================================================================
 // COMPONENTE DE IMPORTAÇÃO INTELIGENTE DE ESCALAS
 // ============================================================================
@@ -1268,7 +1333,7 @@ export default function App() {
 }
 
 // ============================================================================
-// ADMIN DASHBOARD
+// ADMIN DASHBOARD (COM RELATÓRIOS AVANÇADOS)
 // ============================================================================
 function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -1277,8 +1342,19 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
   const [escalasList, setEscalasList] = useState<Escala[]>([]);
   const [setores, setSetores] = useState<Setor[]>([]);
   const [activeTab, setActiveTab] = useState<'RELATORIO' | 'CADASTRO' | 'ESCALAS'>('RELATORIO');
-  const [filter, setFilter] = useState({ aluno: '', setor: '' });
   
+  // Filtros avançados para relatório
+  const [filtros, setFiltros] = useState({
+    nome: '',
+    matricula: '',
+    periodo: '',
+    staff: '',
+    hospital: '',
+    setor: '',
+    dataInicio: '',
+    dataFim: ''
+  });
+
   const [stats, setStats] = useState({
     totalPontos: 0,
     totalHoras: 0,
@@ -1342,10 +1418,22 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
     return () => unsub();
   }, []);
 
-  const filteredRelatorio = relatorios.filter(p => 
-    (!filter.aluno || p.aluno_nome?.toLowerCase().includes(filter.aluno.toLowerCase()) || p.aluno_matricula?.includes(filter.aluno)) &&
-    (!filter.setor || p.setor?.toLowerCase().includes(filter.setor.toLowerCase()))
-  );
+  // Função de filtro avançada
+  const filteredRelatorio = relatorios.filter(p => {
+    const matchNome = !filtros.nome || p.aluno_nome?.toLowerCase().includes(filtros.nome.toLowerCase());
+    const matchMatricula = !filtros.matricula || p.aluno_matricula?.includes(filtros.matricula);
+    const matchPeriodo = !filtros.periodo || p.aluno_periodo === filtros.periodo;
+    const matchStaff = !filtros.staff || p.staff_entrada_nome?.toLowerCase().includes(filtros.staff.toLowerCase());
+    const matchHospital = !filtros.hospital || p.hospital?.toLowerCase().includes(filtros.hospital.toLowerCase());
+    const matchSetor = !filtros.setor || p.setor?.toLowerCase().includes(filtros.setor.toLowerCase());
+    
+    const dataPonto = new Date(p.hora_entrada).toISOString().split('T')[0];
+    const matchDataInicio = !filtros.dataInicio || dataPonto >= filtros.dataInicio;
+    const matchDataFim = !filtros.dataFim || dataPonto <= filtros.dataFim;
+    
+    return matchNome && matchMatricula && matchPeriodo && matchStaff && 
+           matchHospital && matchSetor && matchDataInicio && matchDataFim;
+  });
 
   const salvarSetor = async () => {
     try {
@@ -1401,16 +1489,19 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
   };
 
   const exportToCSV = () => {
-    const headers = ['Aluno', 'Matricula', 'Setor', 'Data', 'Entrada', 'Saída', 'Horas', 'Staff Entrada'];
+    const headers = ['Aluno', 'Matrícula', 'Período', 'Setor', 'Hospital', 'Data', 'Entrada', 'Saída', 'Horas', 'Staff Entrada', 'Staff Saída'];
     const rows = filteredRelatorio.map(p => [
       p.aluno_nome,
       p.aluno_matricula,
+      p.aluno_periodo || '-',
       p.setor,
+      p.hospital || '-',
       new Date(p.hora_entrada).toLocaleDateString('pt-BR'),
       new Date(p.hora_entrada).toLocaleTimeString('pt-BR'),
       p.hora_saida ? new Date(p.hora_saida).toLocaleTimeString('pt-BR') : '---',
       p.horas_totais || 0,
-      p.staff_entrada_nome
+      p.staff_entrada_nome,
+      p.staff_saida_nome || '---'
     ]);
 
     const csv = [headers, ...rows].map(r => r.join(';')).join('\n');
@@ -1453,6 +1544,7 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
 
       {activeTab === 'RELATORIO' && (
         <div className="space-y-6">
+          {/* Cards de Estatísticas */}
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <Card className="p-4">
               <p className="text-sm text-zinc-500">Total de Pontos</p>
@@ -1476,19 +1568,117 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
             </Card>
           </div>
 
-          <Card className="p-4">
-            <div className="grid grid-cols-2 gap-4">
-              <input value={filter.aluno} onChange={(e) => setFilter({...filter, aluno: e.target.value})} placeholder="Filtrar aluno" className="p-2 border rounded" />
-              <input value={filter.setor} onChange={(e) => setFilter({...filter, setor: e.target.value})} placeholder="Filtrar setor" className="p-2 border rounded" />
+          {/* Filtros Avançados */}
+          <Card className="p-6">
+            <h2 className="font-bold text-lg mb-4 flex items-center gap-2">
+              <Filter size={20} /> Filtros Avançados
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 uppercase">Nome do Aluno</label>
+                <input
+                  value={filtros.nome}
+                  onChange={(e) => setFiltros({...filtros, nome: e.target.value})}
+                  placeholder="Digite o nome..."
+                  className="w-full p-2 border rounded-lg mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 uppercase">Matrícula</label>
+                <input
+                  value={filtros.matricula}
+                  onChange={(e) => setFiltros({...filtros, matricula: e.target.value})}
+                  placeholder="Digite a matrícula..."
+                  className="w-full p-2 border rounded-lg mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 uppercase">Período</label>
+                <select
+                  value={filtros.periodo}
+                  onChange={(e) => setFiltros({...filtros, periodo: e.target.value})}
+                  className="w-full p-2 border rounded-lg mt-1"
+                >
+                  <option value="">Todos</option>
+                  <option value="8">8º Período</option>
+                  <option value="9">9º Período</option>
+                  <option value="10">10º Período</option>
+                  <option value="11">11º Período</option>
+                  <option value="12">12º Período</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 uppercase">Staff</label>
+                <input
+                  value={filtros.staff}
+                  onChange={(e) => setFiltros({...filtros, staff: e.target.value})}
+                  placeholder="Nome do staff..."
+                  className="w-full p-2 border rounded-lg mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 uppercase">Hospital</label>
+                <input
+                  value={filtros.hospital}
+                  onChange={(e) => setFiltros({...filtros, hospital: e.target.value})}
+                  placeholder="Ex: HRAN, HRT..."
+                  className="w-full p-2 border rounded-lg mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 uppercase">Setor</label>
+                <input
+                  value={filtros.setor}
+                  onChange={(e) => setFiltros({...filtros, setor: e.target.value})}
+                  placeholder="Ex: UTI, Pediatria..."
+                  className="w-full p-2 border rounded-lg mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 uppercase">Data Início</label>
+                <input
+                  type="date"
+                  value={filtros.dataInicio}
+                  onChange={(e) => setFiltros({...filtros, dataInicio: e.target.value})}
+                  className="w-full p-2 border rounded-lg mt-1"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-zinc-400 uppercase">Data Fim</label>
+                <input
+                  type="date"
+                  value={filtros.dataFim}
+                  onChange={(e) => setFiltros({...filtros, dataFim: e.target.value})}
+                  className="w-full p-2 border rounded-lg mt-1"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end mt-4 gap-2">
+              <Button variant="outline" onClick={() => setFiltros({
+                nome: '', matricula: '', periodo: '', staff: '', hospital: '', setor: '', dataInicio: '', dataFim: ''
+              })}>
+                Limpar Filtros
+              </Button>
+              <Button onClick={exportToCSV}>
+                <Download size={16} className="mr-2" /> Exportar CSV
+              </Button>
             </div>
           </Card>
 
+          {/* Tabela de Resultados */}
           <Card className="p-0 overflow-x-auto">
+            <div className="p-4 bg-zinc-50 border-b flex justify-between items-center">
+              <span className="font-medium">
+                {filteredRelatorio.length} registro(s) encontrado(s)
+              </span>
+            </div>
             <table className="w-full">
               <thead className="bg-zinc-50">
                 <tr>
                   <th className="p-3 text-left">Aluno</th>
+                  <th className="p-3 text-left">Período</th>
                   <th className="p-3 text-left">Setor</th>
+                  <th className="p-3 text-left">Hospital</th>
                   <th className="p-3 text-left">Data</th>
                   <th className="p-3 text-left">Entrada</th>
                   <th className="p-3 text-left">Saída</th>
@@ -1503,21 +1693,31 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
                       <div className="font-medium">{p.aluno_nome}</div>
                       <div className="text-xs text-zinc-400">{p.aluno_matricula}</div>
                     </td>
+                    <td className="p-3">{p.aluno_periodo ? `${p.aluno_periodo}º` : '-'}</td>
                     <td className="p-3">{p.setor}</td>
+                    <td className="p-3">{p.hospital || '-'}</td>
                     <td className="p-3">{new Date(p.hora_entrada).toLocaleDateString('pt-BR')}</td>
                     <td className="p-3">{new Date(p.hora_entrada).toLocaleTimeString('pt-BR')}</td>
                     <td className="p-3">{p.hora_saida ? new Date(p.hora_saida).toLocaleTimeString('pt-BR') : '---'}</td>
                     <td className="p-3 font-bold text-uniceplac-green">{p.horas_totais || 0}h</td>
-                    <td className="p-3">{p.staff_entrada_nome}</td>
+                    <td className="p-3">
+                      <div>{p.staff_entrada_nome}</div>
+                      {p.staff_saida_nome && (
+                        <div className="text-xs text-zinc-400">Saída: {p.staff_saida_nome}</div>
+                      )}
+                    </td>
                   </tr>
                 ))}
+                {filteredRelatorio.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="p-8 text-center text-zinc-400">
+                      Nenhum registro encontrado com os filtros selecionados
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </Card>
-
-          <Button onClick={exportToCSV} className="mt-4">
-            <Download size={16} className="mr-2" /> Exportar CSV
-          </Button>
         </div>
       )}
 
@@ -1529,8 +1729,11 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
               e.preventDefault();
               const f = new FormData(e.target as HTMLFormElement);
               const d = Object.fromEntries(f);
-              await setDoc(doc(db, "Alunos", d.matricula as string), { 
-                ...d, carga_horaria_alvo: Number(d.carga_horaria_alvo), horas_concluidas: 0 
+              await setDoc(doc(db, "Alunos", d.email as string), { 
+                ...d, 
+                periodo: d.periodo,
+                carga_horaria_alvo: Number(d.carga_horaria_alvo), 
+                horas_concluidas: 0 
               });
               alert("Aluno salvo!");
               (e.target as HTMLFormElement).reset();
@@ -1538,7 +1741,16 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
               setAlunos(snap.docs.map(d => ({ id: d.id, ...d.data() })) as Aluno[]);
             }} className="space-y-3">
               <input name="nome" placeholder="Nome completo" required className="w-full p-2 border rounded" />
+              <input name="email" type="email" placeholder="Email institucional" required className="w-full p-2 border rounded" />
               <input name="matricula" placeholder="Matrícula" required className="w-full p-2 border rounded" />
+              <select name="periodo" required className="w-full p-2 border rounded">
+                <option value="">Selecione o período</option>
+                <option value="8">8º Período</option>
+                <option value="9">9º Período</option>
+                <option value="10">10º Período</option>
+                <option value="11">11º Período</option>
+                <option value="12">12º Período</option>
+              </select>
               <input name="turma" placeholder="Turma" required className="w-full p-2 border rounded" />
               <input name="carga_horaria_alvo" type="number" placeholder="Carga horária alvo" required className="w-full p-2 border rounded" />
               <Button type="submit">Salvar Aluno</Button>
@@ -1560,6 +1772,7 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
               <input name="nome" placeholder="Nome do professor" required className="w-full p-2 border rounded" />
               <input name="email" type="email" placeholder="Email" required className="w-full p-2 border rounded" />
               <input name="senha" type="password" placeholder="Senha" required className="w-full p-2 border rounded" />
+              <input name="cnesVinculado" placeholder="CNES (opcional)" className="w-full p-2 border rounded" />
               <Button type="submit">Salvar Staff</Button>
             </form>
           </Card>
