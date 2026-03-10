@@ -1,0 +1,100 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  nome             String
+  senha            String
+  role             Role     @default(STAFF)
+  perfil           String   // "gestor" ou "staff"
+  totp_secret      String?  // Para gerar tokens TOTP
+  cnesVinculado    String?
+  criadoEm         DateTime @default(now())
+  
+  // Relacionamentos
+  pontosEntrada    Ponto[]  @relation("staff_entrada")
+  pontosSaida      Ponto[]  @relation("staff_saida")
+  escalas          Escala[]
+}
+
+model Aluno {
+  id                String   @id @default(cuid())
+  matricula         String   @unique
+  nome              String
+  turma             String?
+  carga_horaria_alvo Int     @default(120)
+  horas_concluidas  Float    @default(0)
+  status            String   @default("ativo")
+  criadoEm          DateTime @default(now())
+  
+  // Relacionamentos
+  pontos            Ponto[]
+  escalas           Escala[]
+}
+
+model Setor {
+  id          String   @id @default(cuid())
+  nome        String   // Ex: "UTI Neonatal"
+  hospital    String   // Ex: "HRAN"
+  cnes        String?  // Código do hospital
+  ativo       Boolean  @default(true)
+  criadoEm    DateTime @default(now())
+  
+  // Relacionamentos
+  escalas     Escala[]
+  pontos      Ponto[]
+}
+
+model Ponto {
+  id                String   @id @default(cuid())
+  aluno_id          String
+  aluno             Aluno    @relation(fields: [aluno_id], references: [id])
+  setor_id          String?
+  setor             Setor?   @relation(fields: [setor_id], references: [id])
+  setor_nome        String?  // Denormalizado para facilitar buscas
+  data_plantao      DateTime @default(now())
+  hora_entrada      DateTime @default(now())
+  hora_saida        DateTime?
+  horas_totais      Float?
+  staff_entrada_id  String
+  staff_entrada     Usuario  @relation("staff_entrada", fields: [staff_entrada_id], references: [id])
+  staff_saida_id    String?
+  staff_saida       Usuario? @relation("staff_saida", fields: [staff_saida_id], references: [id])
+  is_sos_entrada    Boolean  @default(false)
+  is_sos_saida      Boolean  @default(false)
+  observacao        String?
+  criadoEm          DateTime @default(now())
+}
+
+model Escala {
+  id           String   @id @default(cuid())
+  aluno_id     String
+  aluno        Aluno    @relation(fields: [aluno_id], references: [id])
+  aluno_nome   String
+  staff_id     String
+  staff        Usuario  @relation(fields: [staff_id], references: [id])
+  staff_nome   String
+  setor_id     String?
+  setor        Setor?   @relation(fields: [setor_id], references: [id])
+  setor_nome   String?  // Denormalizado
+  cnes         String?
+  hospital     String?
+  data         String   // Formato YYYY-MM-DD
+  periodo      String   // MANHA, TARDE, NOITE
+  carga_horaria Float   @default(6)
+  criadoEm     DateTime @default(now())
+}
+
+enum Role {
+  GESTOR
+  STAFF
+  ALUNO
+}

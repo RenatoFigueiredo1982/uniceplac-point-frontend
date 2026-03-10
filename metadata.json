@@ -1,0 +1,5 @@
+{
+  "name": "UNICEPLAC - POINT",
+  "description": "Sistema de registro de ponto anti-fraude para internato médico utilizando QR Codes dinâmicos (TOTP) e Modo SOS.",
+  "requestFramePermissions": ["camera"]
+}

@@ -1,0 +1,72 @@
+{
+  "name": "uniceplac-point",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Sistema de Ponto para Medicina",
+  "main": "electron/main.js",
+  "scripts": {
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "vite",
+    "dev:backend": "cd ponto-medicina-backend && npm run dev",
+    "dev:electron": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"wait-on http://localhost:5173 && electron .\"",
+    "build": "vite build",
+    "build:electron": "npm run build && electron-builder",
+    "preview": "vite preview",
+    "postinstall": "cd ponto-medicina-backend && npm install",
+    "prisma:studio": "cd ponto-medicina-backend && npx prisma studio",
+    "db:setup": "cd ponto-medicina-backend && npm run db:setup"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0",
+    "firebase": "^11.10.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^0.454.0",
+    "motion": "^11.11.11",
+    "qrcode.react": "^4.1.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.3",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "electron": "^33.0.0",
+    "electron-builder": "^24.13.3",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "vite": "^5.4.10",
+    "wait-on": "^8.0.1"
+  },
+  "build": {
+    "appId": "com.uniceplac.point",
+    "productName": "UNICEPLAC-POINT",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "ponto-medicina-backend/**/*",
+      "!ponto-medicina-backend/node_modules",
+      "!ponto-medicina-backend/prisma/*.db"
+    ],
+    "extraResources": [
+      {
+        "from": "ponto-medicina-backend/prisma",
+        "to": "prisma",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "win": {
+      "icon": "public/logo-oficial.png",
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    }
+  }
+}

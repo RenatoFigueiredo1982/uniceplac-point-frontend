@@ -1,0 +1,17 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-uniceplac-green: #00734F;
+    --color-uniceplac-mint: #B4D2C2;
+    --color-uniceplac-orange: #F07F3C;
+    --color-uniceplac-purple: #421B71;
+    --color-uniceplac-bg: #F8FAFC;
+  }
+
+  body {
+    @apply antialiased bg-[#F8FAFC] text-zinc-900;
+  }
+}
