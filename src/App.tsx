@@ -74,11 +74,10 @@ const Button = ({ children, onClick, variant = 'primary', className = "", disabl
 };
 
 // ============================================================================
-// COMPONENTE DE LOGIN DO ALUNO
+// COMPONENTE DE LOGIN DO ALUNO (APENAS CADASTRADOS)
 // ============================================================================
 const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) => void; onBack: () => void }) => {
   const [matricula, setMatricula] = useState('');
-  const [nome, setNome] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -88,6 +87,7 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
     setError('');
 
     try {
+      // Buscar aluno no banco
       const q = query(collection(db, "Alunos"), where("matricula", "==", matricula));
       const snap = await getDocs(q);
       
@@ -99,21 +99,7 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
           id: snap.docs[0].id 
         });
       } else {
-        if (nome) {
-          const novoId = `aluno_${Date.now()}`;
-          await setDoc(doc(db, "Alunos", novoId), {
-            nome,
-            matricula,
-            turma: 'Não informada',
-            carga_horaria_alvo: 120,
-            horas_concluidas: 0,
-            status: 'ativo',
-            criadoEm: new Date().toISOString()
-          });
-          onLoginSuccess({ nome, matricula, id: novoId });
-        } else {
-          setError('Aluno não encontrado. Se for novo, preencha o nome.');
-        }
+        setError('Matrícula não encontrada. Procure o gestor para se cadastrar.');
       }
     } catch (err) {
       setError('Erro ao fazer login');
@@ -126,7 +112,7 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
     <div className="max-w-md mx-auto p-6">
       <Logo size={80} className="mx-auto mb-6" />
       <h1 className="text-2xl font-bold text-center text-uniceplac-green mb-2">Acesso do Aluno</h1>
-      <p className="text-center text-zinc-500 mb-6">Informe seus dados para acessar o sistema</p>
+      <p className="text-center text-zinc-500 mb-6">Apenas alunos cadastrados podem acessar</p>
       
       <Card className="p-6">
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -141,18 +127,6 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
               className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-uniceplac-green/20"
             />
           </div>
-          
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Nome completo</label>
-            <input
-              type="text"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Digite seu nome (se for novo aluno)"
-              className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-uniceplac-green/20"
-            />
-            <p className="text-xs text-zinc-400 mt-1">Se for aluno novo, preencha o nome para se cadastrar</p>
-          </div>
 
           {error && (
             <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
@@ -166,6 +140,12 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
         </form>
 
         <div className="mt-4 text-center">
+          <p className="text-xs text-zinc-400">
+            Não tem cadastro? Procure o gestor do sistema.
+          </p>
+        </div>
+
+        <div className="mt-4 text-center">
           <button onClick={onBack} className="text-sm text-uniceplac-green hover:underline">
             ← Voltar ao login principal
           </button>
@@ -174,9 +154,8 @@ const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) =>
     </div>
   );
 };
-
 // ============================================================================
-// COMPONENTE DE SCANNER DO ALUNO
+// COMPONENTE DE SCANNER DO ALUNO (CORRIGIDO PARA CELULAR)
 // ============================================================================
 const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: () => void }) => {
   const [scanned, setScanned] = useState(false);
@@ -184,29 +163,42 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
   const [result, setResult] = useState<any>(null);
   const [pontoRegistrado, setPontoRegistrado] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isMobile, setIsMobile] = useState(false);
   const scannerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Detectar se é mobile
+  useEffect(() => {
+    const checkMobile = () => {
+      const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+      return /android|iphone|ipad|ipod|blackberry|windows phone/i.test(userAgent);
+    };
+    setIsMobile(checkMobile());
+  }, []);
 
   useEffect(() => {
     if (!pontoRegistrado && containerRef.current && !scannerRef.current) {
       containerRef.current.innerHTML = '';
 
       try {
-        const scanner = new Html5QrcodeScanner(
-          "reader",
-          {
-            fps: 10,
-            qrbox: { width: 250, height: 250 },
-            rememberLastUsedCamera: true,
-            showTorchButtonIfSupported: true,
-            aspectRatio: 1.0,
-            videoConstraints: {
-              facingMode: "environment"
-            }
-          },
-          false
-        );
+        // Configurações específicas para mobile
+        const config: any = {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          rememberLastUsedCamera: true,
+          showTorchButtonIfSupported: true,
+          aspectRatio: 1.0
+        };
 
+        // No celular, forçar câmera traseira e configurações específicas
+        if (isMobile) {
+          config.videoConstraints = {
+            facingMode: { exact: "environment" }
+          };
+          config.fps = 5; // Reduzir FPS para melhor performance no celular
+        }
+
+        const scanner = new Html5QrcodeScanner("reader", config, false);
         scannerRef.current = scanner;
 
         const onScanSuccess = (decodedText: string) => {
@@ -244,7 +236,7 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
         }
       }
     };
-  }, [pontoRegistrado]);
+  }, [pontoRegistrado, isMobile]);
 
   const handlePonto = async (qrData: any) => {
     setLoading(true);
@@ -307,10 +299,21 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
           <h2 className="text-xl font-bold text-red-600 mb-2">Câmera não acessível</h2>
           <p className="text-zinc-600 mb-4">{cameraError}</p>
           <p className="text-sm text-zinc-500 mb-4">
-            Para permitir:
-            <br />1. Clique no ícone de cadeado na barra de endereços
-            <br />2. Selecione "Permitir" para a câmera
-            <br />3. Recarregue a página
+            {isMobile ? (
+              <>
+                No celular:
+                <br />1. Abra as configurações do navegador
+                <br />2. Permita o acesso à câmera
+                <br />3. Recarregue a página
+              </>
+            ) : (
+              <>
+                Para permitir:
+                <br />1. Clique no ícone de cadeado na barra de endereços
+                <br />2. Selecione "Permitir" para a câmera
+                <br />3. Recarregue a página
+              </>
+            )}
           </p>
           <div className="space-y-3">
             <Button onClick={() => window.location.reload()} className="w-full">
@@ -349,14 +352,16 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
             id="reader" 
             ref={containerRef}
             className="aspect-square bg-zinc-900 rounded-2xl overflow-hidden border-4 border-white shadow-xl"
-            style={{ minHeight: '300px', width: '100%' }}
+            style={{ minHeight: isMobile ? '250px' : '300px', width: '100%' }}
           />
           <p className="text-center text-zinc-500 mt-4">
             {scanned && loading ? 'Processando...' : 'Aponte para o QR Code do Staff'}
           </p>
-          <p className="text-center text-xs text-zinc-400 mt-2">
-            Certifique-se de que a câmera está desbloqueada
-          </p>
+          {isMobile && (
+            <p className="text-center text-xs text-amber-600 mt-2">
+              📱 No celular, aproxime bem o QR Code da câmera
+            </p>
+          )}
         </div>
       ) : loading ? (
         <div className="text-center py-12">
@@ -394,7 +399,6 @@ const AlunoScanner = ({ studentData, onLogout }: { studentData: any; onLogout: (
     </div>
   );
 };
-
 // ============================================================================
 // COMPONENTE DE IMPORTAÇÃO INTELIGENTE DE ESCALAS
 // ============================================================================
@@ -1659,7 +1663,7 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
 }
 
 // ============================================================================
-// STAFF VIEW
+// STAFF VIEW (COM LISTA SEMPRE VISÍVEL)
 // ============================================================================
 function StaffView({ user, onLogout, navigateToDoc }: any) {
   const [token, setToken] = useState('');
@@ -1718,7 +1722,6 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
 
   const [especialidadeSelecionada, setEspecialidadeSelecionada] = useState<any>(null);
   const [filtro, setFiltro] = useState('');
-  const [mostrarDropdown, setMostrarDropdown] = useState(false);
   const [hospitalSelecionado, setHospitalSelecionado] = useState('HRAN');
   const hospitais = ['HRAN', 'HRT', 'HUB', 'HRL', 'HMIB'];
 
@@ -1744,7 +1747,6 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
       setor_completo: `${especialidade.nome} - ${especialidade.setores[0]} - ${hospitalSelecionado}`
     });
     setFiltro(especialidade.nome);
-    setMostrarDropdown(false);
   };
 
   const qrPayload = especialidadeSelecionada ? JSON.stringify({ 
@@ -1776,6 +1778,7 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
       </header>
 
       <Card className="p-6 space-y-6">
+        {/* Seleção de Hospital */}
         <div>
           <label className="text-xs font-semibold text-zinc-400 uppercase mb-2 block">
             Hospital de Atuação
@@ -1806,7 +1809,8 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
           </div>
         </div>
 
-        <div className="relative">
+        {/* Busca */}
+        <div>
           <label className="text-xs font-semibold text-zinc-400 uppercase mb-2 block">
             Buscar Especialidade / Setor
           </label>
@@ -1815,49 +1819,54 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
             <input
               type="text"
               value={filtro}
-              onChange={(e) => {
-                setFiltro(e.target.value);
-                setMostrarDropdown(true);
-              }}
-              onFocus={() => setMostrarDropdown(true)}
+              onChange={(e) => setFiltro(e.target.value)}
               placeholder="Digite para buscar..."
               className="w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-uniceplac-green/20 focus:border-uniceplac-green"
             />
           </div>
+        </div>
 
-          {mostrarDropdown && filtro.length > 0 && (
-            <div className="absolute z-50 w-full mt-1 bg-white border rounded-xl shadow-xl max-h-80 overflow-y-auto">
-              {especialidadesFiltradas.length > 0 ? (
-                especialidadesFiltradas.map((esp, index) => (
+        {/* LISTA DE ESPECIALIDADES - SEMPRE VISÍVEL */}
+        <div>
+          <label className="text-xs font-semibold text-zinc-400 uppercase mb-2 block">
+            Especialidades Disponíveis
+          </label>
+          <div className="border rounded-xl bg-white max-h-96 overflow-y-auto">
+            {especialidadesFiltradas.length > 0 ? (
+              <div className="divide-y">
+                {especialidadesFiltradas.map((esp, index) => (
                   <button
                     key={index}
                     onClick={() => selecionarEspecialidade(esp)}
-                    className="w-full text-left p-3 hover:bg-uniceplac-green/5 border-b last:border-0 transition-colors"
+                    className={`w-full text-left p-4 hover:bg-uniceplac-green/5 transition-colors ${
+                      especialidadeSelecionada?.nome === esp.nome ? 'bg-uniceplac-green/10 border-l-4 border-uniceplac-green' : ''
+                    }`}
                   >
-                    <div className="font-medium text-uniceplac-green">{esp.nome}</div>
-                    <div className="text-sm text-zinc-500 flex flex-wrap gap-1 mt-1">
-                      {esp.setores.slice(0, 3).map((setor, i) => (
-                        <span key={i} className="bg-zinc-100 px-2 py-0.5 rounded-full text-xs">
+                    <div className="font-medium text-uniceplac-green text-base">{esp.nome}</div>
+                    <div className="text-sm text-zinc-500 flex flex-wrap gap-1 mt-2">
+                      {esp.setores.slice(0, 4).map((setor, i) => (
+                        <span key={i} className="bg-zinc-100 px-2 py-1 rounded-full text-xs">
                           {setor}
                         </span>
                       ))}
-                      {esp.setores.length > 3 && (
-                        <span className="text-xs text-zinc-400">
-                          +{esp.setores.length - 3}
+                      {esp.setores.length > 4 && (
+                        <span className="text-xs text-zinc-400 px-2 py-1">
+                          +{esp.setores.length - 4}
                         </span>
                       )}
                     </div>
                   </button>
-                ))
-              ) : (
-                <div className="p-4 text-center text-zinc-400">
-                  Nenhuma especialidade encontrada
-                </div>
-              )}
-            </div>
-          )}
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-zinc-400">
+                Nenhuma especialidade encontrada
+              </div>
+            )}
+          </div>
         </div>
 
+        {/* Especialidade Selecionada */}
         {especialidadeSelecionada && (
           <div className="bg-uniceplac-green/5 p-4 rounded-xl border-2 border-uniceplac-green/20">
             <div className="flex justify-between items-start">
@@ -1894,6 +1903,7 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
           </div>
         )}
 
+        {/* QR Code */}
         {especialidadeSelecionada && (
           <div className="border-t pt-6">
             <div className="text-center mb-4">
