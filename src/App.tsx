@@ -1604,19 +1604,75 @@ function AdminDashboard({ user, onLogout, navigateToDoc }: any) {
 }
 
 // ============================================================================
-// STAFF VIEW
+// STAFF VIEW ATUALIZADO - COM LISTA COMPLETA DE ESPECIALIDADES
 // ============================================================================
 function StaffView({ user, onLogout, navigateToDoc }: any) {
   const [token, setToken] = useState('');
-  const [setores, setSetores] = useState<Setor[]>([]);
-  const [setorSelecionado, setSetorSelecionado] = useState<Setor | null>(null);
-  const [filtroSetor, setFiltroSetor] = useState('');
+  const [especialidades, setEspecialidades] = useState<any[]>([]);
+  const [especialidadeSelecionada, setEspecialidadeSelecionada] = useState<any>(null);
+  const [filtro, setFiltro] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hospitalSelecionado, setHospitalSelecionado] = useState('HRAN');
+  const [mostrarDropdown, setMostrarDropdown] = useState(false);
 
-  useEffect(() => {
-    carregarSetores();
-  }, []);
+  // Lista completa de especialidades (da sua tabela)
+  const listaEspecialidades = [
+    { nome: "Acupuntura", setores: ["Ambulatório / Clínica"] },
+    { nome: "Alergia e Imunologia", setores: ["Ambulatório", "Enfermaria", "Laboratório"] },
+    { nome: "Anestesiologia", setores: ["Centro Cirúrgico", "URPA", "UTI", "Ambulatório de Dor"] },
+    { nome: "Angiologia", setores: ["Ambulatório", "Enfermaria", "Centro Cirúrgico", "Exames Vasculares"] },
+    { nome: "Cardiologia", setores: ["Ambulatório", "Enfermaria", "UTI", "Emergência (PS)", "Ecocardiograma", "Teste Ergométrico", "Hemodinâmica"] },
+    { nome: "Cirurgia Cardiovascular", setores: ["Centro Cirúrgico", "UTI", "Enfermaria"] },
+    { nome: "Cirurgia da Mão", setores: ["Centro Cirúrgico", "Ambulatório", "Enfermaria", "Pronto-Socorro"] },
+    { nome: "Cirurgia de Cabeça e Pescoço", setores: ["Centro Cirúrgico", "Ambulatório", "Enfermaria"] },
+    { nome: "Cirurgia do Aparelho Digestivo", setores: ["Centro Cirúrgico", "Ambulatório", "Enfermaria", "Pronto-Socorro"] },
+    { nome: "Cirurgia Geral", setores: ["Centro Cirúrgico", "Pronto-Socorro", "Enfermaria", "Ambulatório"] },
+    { nome: "Cirurgia Oncológica", setores: ["Centro Cirúrgico", "Ambulatório", "Enfermaria", "UTI"] },
+    { nome: "Cirurgia Pediátrica", setores: ["Centro Cirúrgico", "Enfermaria Pediátrica", "UTI Pediátrica", "Pronto-Socorro Infantil", "Ambulatório"] },
+    { nome: "Cirurgia Plástica", setores: ["Centro Cirúrgico", "Ambulatório", "Enfermaria", "Unidade de Queimados"] },
+    { nome: "Cirurgia Torácica", setores: ["Centro Cirúrgico", "Enfermaria", "UTI", "Ambulatório", "Broncoscopia"] },
+    { nome: "Cirurgia Vascular", setores: ["Centro Cirúrgico", "Ambulatório", "Enfermaria", "Pronto-Socorro", "Doppler"] },
+    { nome: "Clínica Médica", setores: ["Enfermaria", "Ambulatório", "Pronto-Socorro", "UTI"] },
+    { nome: "Coloproctologia", setores: ["Ambulatório", "Centro Cirúrgico", "Enfermaria", "Colonoscopia"] },
+    { nome: "Dermatologia", setores: ["Ambulatório", "Centro Cirúrgico", "Enfermaria", "Unidade de Queimados"] },
+    { nome: "Endocrinologia e Metabologia", setores: ["Ambulatório", "Enfermaria"] },
+    { nome: "Endoscopia", setores: ["Endoscopia Digestiva", "Colonoscopia", "Broncoscopia", "Ambulatório"] },
+    { nome: "Gastroenterologia", setores: ["Ambulatório", "Enfermaria", "Endoscopia", "Pronto-Socorro"] },
+    { nome: "Genética Médica", setores: ["Ambulatório", "Enfermaria", "Laboratório"] },
+    { nome: "Geriatria", setores: ["Ambulatório", "Enfermaria", "ILP", "Atendimento Domiciliar"] },
+    { nome: "Ginecologia e Obstetrícia", setores: ["Ambulatório de Ginecologia", "Centro Cirúrgico", "Enfermaria", "Centro Obstétrico", "Pronto-Socorro", "Ultrassom"] },
+    { nome: "Hematologia e Hemoterapia", setores: ["Ambulatório", "Enfermaria", "UTI", "Banco de Sangue", "Laboratório"] },
+    { nome: "Homeopatia", setores: ["Ambulatório"] },
+    { nome: "Infectologia", setores: ["Ambulatório", "Enfermaria", "UTI", "Pronto-Socorro", "Setor de Isolamento"] },
+    { nome: "Mastologia", setores: ["Ambulatório", "Centro Cirúrgico", "Enfermaria", "Mamografia"] },
+    { nome: "Medicina de Emergência", setores: ["Pronto-Socorro", "Sala de Emergência", "UTI", "Observação"] },
+    { nome: "Medicina de Família", setores: ["Ambulatório (UBS)", "Atendimento Domiciliar"] },
+    { nome: "Medicina do Trabalho", setores: ["Ambulatório de Empresa", "Perícia Médica"] },
+    { nome: "Medicina do Tráfego", setores: ["Clínicas", "Perícia Médica"] },
+    { nome: "Medicina Esportiva", setores: ["Ambulatório", "Clube Esportivo", "Reabilitação"] },
+    { nome: "Medicina Intensiva", setores: ["UTI", "UCI"] },
+    { nome: "Nefrologia", setores: ["Ambulatório", "Enfermaria", "UTI", "Hemodiálise", "Diálise Peritoneal", "Pronto-Socorro"] },
+    { nome: "Neurocirurgia", setores: ["Centro Cirúrgico", "UTI", "Enfermaria", "Pronto-Socorro"] },
+    { nome: "Neurologia", setores: ["Ambulatório", "Enfermaria", "UTI", "Pronto-Socorro", "Eletroencefalograma"] },
+    { nome: "Nutrologia", setores: ["Ambulatório", "Enfermaria", "UTI"] },
+    { nome: "Oftalmologia", setores: ["Ambulatório", "Centro Cirúrgico", "Pronto-Socorro", "Retinografia", "Tonometria"] },
+    { nome: "Oncologia Clínica", setores: ["Ambulatório", "Enfermaria", "UTI", "Quimioterapia"] },
+    { nome: "Ortopedia e Traumatologia", setores: ["Ambulatório", "Centro Cirúrgico", "Enfermaria", "Pronto-Socorro", "Gesso"] },
+    { nome: "Otorrinolaringologia", setores: ["Ambulatório", "Centro Cirúrgico", "Pronto-Socorro", "Audiometria"] },
+    { nome: "Patologia", setores: ["Laboratório de Anatomia Patológica"] },
+    { nome: "Pediatria", setores: ["Enfermaria Pediátrica", "Ambulatório", "Pronto-Socorro Infantil", "UTI Pediátrica", "Berçário"] },
+    { nome: "Pneumologia", setores: ["Ambulatório", "Enfermaria", "UTI", "Pronto-Socorro", "Broncoscopia", "Prova de Função Pulmonar"] },
+    { nome: "Psiquiatria", setores: ["Ambulatório", "Enfermaria", "Pronto-Socorro", "Hospital-Dia"] },
+    { nome: "Radiologia", setores: ["Raio-X", "Tomografia", "Ressonância", "Ultrassom", "Ambulatório"] },
+    { nome: "Radioterapia", setores: ["Setor de Tratamento", "Ambulatório"] },
+    { nome: "Reumatologia", setores: ["Ambulatório", "Enfermaria"] },
+    { nome: "Urologia", setores: ["Ambulatório", "Centro Cirúrgico", "Enfermaria", "Pronto-Socorro", "Ultrassom", "Urodinâmica"] }
+  ];
 
+  // Hospitais disponíveis
+  const hospitais = ['HRAN', 'HRT', 'HUB', 'HRL', 'HMIB'];
+
+  // Efeito para gerar token a cada 30 segundos
   useEffect(() => {
     const gerarToken = () => {
       const novoToken = Math.floor(100000 + Math.random() * 900000).toString();
@@ -1627,138 +1683,257 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
     return () => clearInterval(interval);
   }, []);
 
-  const carregarSetores = async () => {
-    setLoading(true);
+  // Filtrar especialidades baseado no texto de busca
+  const especialidadesFiltradas = listaEspecialidades.filter(esp => 
+    esp.nome.toLowerCase().includes(filtro.toLowerCase()) ||
+    esp.setores.some(s => s.toLowerCase().includes(filtro.toLowerCase()))
+  );
+
+  // Selecionar especialidade
+  const selecionarEspecialidade = (especialidade: any) => {
+    setEspecialidadeSelecionada({
+      ...especialidade,
+      hospital: hospitalSelecionado,
+      setor_completo: `${especialidade.nome} - ${especialidade.setores[0]} - ${hospitalSelecionado}`
+    });
+    setFiltro(especialidade.nome);
+    setMostrarDropdown(false);
+    
+    // Salvar no banco (via API)
+    salvarSelecaoStaff(especialidade);
+  };
+
+  // Salvar seleção do staff no banco
+  const salvarSelecaoStaff = async (especialidade: any) => {
     try {
-      const snap = await getDocs(collection(db, "Setores"));
-      const setoresData = snap.docs.map(d => ({ id: d.id, ...d.data() })) as Setor[];
-      setSetores(setoresData);
-      if (setoresData.length > 0 && !setorSelecionado) {
-        setSetorSelecionado(setoresData[0]);
-      }
+      const API_URL = import.meta.env.VITE_API_URL || 'https://uniceplac-point-backend.onrender.com';
+      
+      await fetch(`${API_URL}/api/staff/selecao`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          staff_id: user.id,
+          staff_nome: user.nome,
+          especialidade: especialidade.nome,
+          setor: especialidade.setores[0],
+          hospital: hospitalSelecionado,
+          timestamp: new Date().toISOString()
+        })
+      });
     } catch (error) {
-      console.error('Erro ao carregar setores:', error);
-    } finally {
-      setLoading(false);
+      console.error('Erro ao salvar seleção:', error);
     }
   };
 
-  const setoresFiltrados = setores.filter(s => 
-    s.nome.toLowerCase().includes(filtroSetor.toLowerCase()) ||
-    s.hospital.toLowerCase().includes(filtroSetor.toLowerCase())
-  );
-
-  const qrPayload = setorSelecionado ? JSON.stringify({ 
-    staff_id: user.id, 
-    setor: setorSelecionado.nome,
-    hospital: setorSelecionado.hospital,
-    setor_id: setorSelecionado.id,
+  // Payload do QR Code
+  const qrPayload = especialidadeSelecionada ? JSON.stringify({ 
+    staff_id: user.id,
+    staff_nome: user.nome,
+    especialidade: especialidadeSelecionada.nome,
+    setor: especialidadeSelecionada.setores[0],
+    hospital: hospitalSelecionado,
     token: token,
     timestamp: Date.now()
   }) : '';
 
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-3xl mx-auto p-6">
       <header className="flex justify-between items-center mb-6">
-        <Logo size={32} />
-        <div>
-          <h1 className="text-xl font-bold text-uniceplac-green">App Staff</h1>
-          <p className="text-xs text-zinc-500">{user.nome}</p>
+        <Logo size={40} />
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-uniceplac-green">App Staff</h1>
+          <p className="text-sm text-zinc-500">{user.nome}</p>
         </div>
         <div className="flex gap-2">
-          <Button onClick={navigateToDoc} variant="outline" className="p-2"><Book size={18}/></Button>
-          <Button onClick={onLogout} variant="outline" className="p-2"><LogOut size={18}/></Button>
+          <Button onClick={navigateToDoc} variant="outline" className="p-2">
+            <Book size={20} />
+          </Button>
+          <Button onClick={onLogout} variant="outline" className="p-2">
+            <LogOut size={20} />
+          </Button>
         </div>
       </header>
 
       <Card className="p-6 space-y-6">
+        {/* Seleção de Hospital */}
         <div>
           <label className="text-xs font-semibold text-zinc-400 uppercase mb-2 block">
-            Buscar Setor
+            Hospital de Atuação
+          </label>
+          <div className="flex gap-2 flex-wrap">
+            {hospitais.map(hospital => (
+              <button
+                key={hospital}
+                onClick={() => {
+                  setHospitalSelecionado(hospital);
+                  if (especialidadeSelecionada) {
+                    setEspecialidadeSelecionada({
+                      ...especialidadeSelecionada,
+                      hospital,
+                      setor_completo: `${especialidadeSelecionada.nome} - ${especialidadeSelecionada.setores[0]} - ${hospital}`
+                    });
+                  }
+                }}
+                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                  hospitalSelecionado === hospital
+                    ? 'bg-uniceplac-green text-white shadow-md'
+                    : 'bg-zinc-100 text-zinc-600 hover:bg-uniceplac-green/10'
+                }`}
+              >
+                {hospital}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Busca com Auto-complete */}
+        <div className="relative">
+          <label className="text-xs font-semibold text-zinc-400 uppercase mb-2 block">
+            Buscar Especialidade / Setor
           </label>
           <div className="relative">
             <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
             <input
               type="text"
-              value={filtroSetor}
-              onChange={(e) => setFiltroSetor(e.target.value)}
+              value={filtro}
+              onChange={(e) => {
+                setFiltro(e.target.value);
+                setMostrarDropdown(true);
+              }}
+              onFocus={() => setMostrarDropdown(true)}
               placeholder="Digite para buscar..."
-              className="w-full pl-10 pr-4 py-3 border rounded-xl"
+              className="w-full pl-10 pr-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-uniceplac-green/20 focus:border-uniceplac-green"
             />
           </div>
-        </div>
 
-        <div>
-          <label className="text-xs font-semibold text-zinc-400 uppercase mb-2 block">
-            Selecione seu setor
-          </label>
-          {loading ? (
-            <div className="flex justify-center py-4">
-              <Loader2 className="animate-spin text-uniceplac-green" size={24} />
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-60 overflow-y-auto p-1">
-              {setoresFiltrados.map(setor => (
-                <button
-                  key={setor.id}
-                  onClick={() => setSetorSelecionado(setor)}
-                  className={`p-3 rounded-lg text-left transition-all ${
-                    setorSelecionado?.id === setor.id
-                      ? 'bg-uniceplac-green text-white shadow-md'
-                      : 'bg-zinc-50 hover:bg-uniceplac-green/10 border'
-                  }`}
-                >
-                  <div className="font-medium">{setor.nome}</div>
-                  <div className={`text-xs ${setorSelecionado?.id === setor.id ? 'text-white/80' : 'text-zinc-400'}`}>
-                    {setor.hospital}
-                  </div>
-                </button>
-              ))}
-              {setoresFiltrados.length === 0 && (
-                <div className="col-span-2 text-center py-4 text-zinc-400">
-                  Nenhum setor encontrado
+          {/* Dropdown de resultados */}
+          {mostrarDropdown && filtro.length > 0 && (
+            <div className="absolute z-50 w-full mt-1 bg-white border rounded-xl shadow-xl max-h-80 overflow-y-auto">
+              {especialidadesFiltradas.length > 0 ? (
+                especialidadesFiltradas.map((esp, index) => (
+                  <button
+                    key={index}
+                    onClick={() => selecionarEspecialidade(esp)}
+                    className="w-full text-left p-3 hover:bg-uniceplac-green/5 border-b last:border-0 transition-colors"
+                  >
+                    <div className="font-medium text-uniceplac-green">{esp.nome}</div>
+                    <div className="text-sm text-zinc-500 flex flex-wrap gap-1 mt-1">
+                      {esp.setores.slice(0, 3).map((setor, i) => (
+                        <span key={i} className="bg-zinc-100 px-2 py-0.5 rounded-full text-xs">
+                          {setor}
+                        </span>
+                      ))}
+                      {esp.setores.length > 3 && (
+                        <span className="text-xs text-zinc-400">
+                          +{esp.setores.length - 3}
+                        </span>
+                      )}
+                    </div>
+                  </button>
+                ))
+              ) : (
+                <div className="p-4 text-center text-zinc-400">
+                  Nenhuma especialidade encontrada
                 </div>
               )}
             </div>
           )}
         </div>
 
-        {setorSelecionado && (
-          <>
-            <div className="border-t pt-4">
-              <div className="bg-uniceplac-green/5 p-3 rounded-lg mb-4">
-                <p className="text-sm font-medium">Setor selecionado:</p>
-                <p className="text-lg font-bold text-uniceplac-green">{setorSelecionado.nome}</p>
-                <p className="text-sm text-zinc-500">{setorSelecionado.hospital}</p>
-              </div>
-
-              <div className="flex justify-center p-4 bg-white border rounded-2xl">
-                <QRCodeSVG value={qrPayload} size={200} level="H" />
-              </div>
-
-              <div className="text-center mt-4">
-                <p className="text-sm text-zinc-500">
-                  Token: <span className="font-mono font-bold text-uniceplac-green">{token}</span>
+        {/* Especialidade Selecionada */}
+        {especialidadeSelecionada && (
+          <div className="bg-uniceplac-green/5 p-4 rounded-xl border-2 border-uniceplac-green/20">
+            <div className="flex justify-between items-start">
+              <div>
+                <p className="text-xs text-uniceplac-green font-semibold uppercase">
+                  Especialidade Selecionada
                 </p>
-                <p className="text-xs text-zinc-400 mt-2">
-                  Atualizado a cada 30 segundos
-                </p>
+                <h2 className="text-xl font-bold text-uniceplac-green mt-1">
+                  {especialidadeSelecionada.nome}
+                </h2>
+                <div className="flex items-center gap-2 mt-2">
+                  <MapPin size={16} className="text-zinc-400" />
+                  <span className="text-zinc-600">{hospitalSelecionado}</span>
+                </div>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {especialidadeSelecionada.setores.slice(0, 4).map((setor: string, i: number) => (
+                    <span key={i} className="bg-white px-3 py-1 rounded-full text-xs border">
+                      {setor}
+                    </span>
+                  ))}
+                </div>
               </div>
+              <button
+                onClick={() => {
+                  setEspecialidadeSelecionada(null);
+                  setFiltro('');
+                }}
+                className="p-2 hover:bg-zinc-200 rounded-full transition-colors"
+                title="Trocar especialidade"
+              >
+                <X size={20} className="text-zinc-400" />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* QR Code */}
+        {especialidadeSelecionada && (
+          <div className="border-t pt-6">
+            <div className="text-center mb-4">
+              <p className="text-sm font-medium text-zinc-500">
+                QR Code para registro de ponto
+              </p>
+              <p className="text-xs text-zinc-400">
+                O token é renovado automaticamente a cada 30 segundos
+              </p>
             </div>
 
-            <button
-              onClick={() => setSetorSelecionado(null)}
-              className="w-full text-center text-sm text-uniceplac-green hover:underline mt-2"
-            >
-              ← Trocar de setor
-            </button>
-          </>
+            <div className="flex justify-center p-6 bg-white border-2 rounded-2xl shadow-lg">
+              {qrPayload ? (
+                <QRCodeSVG value={qrPayload} size={220} level="H" />
+              ) : (
+                <div className="w-[220px] h-[220px] bg-zinc-100 animate-pulse rounded-xl" />
+              )}
+            </div>
+
+            <div className="mt-4 text-center">
+              <div className="inline-flex items-center gap-2 bg-uniceplac-green/10 px-4 py-2 rounded-full">
+                <Clock size={16} className="text-uniceplac-green" />
+                <span className="font-mono font-bold text-uniceplac-green text-lg">
+                  {token}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 mt-2">
+                Token válido por 30 segundos • Escaneie com o app do aluno
+              </p>
+            </div>
+
+            <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-200">
+              <p className="text-xs text-amber-700 font-medium mb-1">
+                📋 Informações que serão registradas:
+              </p>
+              <ul className="text-xs text-amber-600 space-y-1">
+                <li>• Staff: {user.nome}</li>
+                <li>• Especialidade: {especialidadeSelecionada.nome}</li>
+                <li>• Hospital: {hospitalSelecionado}</li>
+                <li>• Data/Hora: {new Date().toLocaleString('pt-BR')}</li>
+                <li>• Token de segurança: {token}</li>
+              </ul>
+            </div>
+          </div>
         )}
       </Card>
+
+      {/* Botão de ajuda */}
+      <div className="mt-4 text-center">
+        <p className="text-xs text-zinc-400">
+          Selecione sua especialidade e hospital para gerar o QR Code
+        </p>
+      </div>
     </div>
   );
 }
-
 // ============================================================================
 // STUDENT VIEW (LEGADO - MANTIDO PARA COMPATIBILIDADE)
 // ============================================================================
