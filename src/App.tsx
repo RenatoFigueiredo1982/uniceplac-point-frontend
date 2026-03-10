@@ -1934,55 +1934,112 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
   );
 }
 
-// ============================================================================
-// STUDENT VIEW (LEGADO)
+/// ============================================================================
+// STUDENT VIEW (VERSÃO CORRIGIDA COM BACKEND REAL)
 // ============================================================================
 function StudentView({ onBack, studentData, setStudentData }: any) {
   const [step, setStep] = useState(studentData ? 'SCAN' : 'ONBOARDING');
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [cameraError, setCameraError] = useState<string | null>(null);
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (step === 'SCAN' && !scanned) {
-      scannerRef.current = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
-      scannerRef.current.render(onScanSuccess, () => {});
+    if (step === 'SCAN' && !scanned && !cameraError && containerRef.current) {
+      // Limpar container
+      containerRef.current.innerHTML = '';
+
+      try {
+        const scanner = new Html5QrcodeScanner(
+          "reader",
+          {
+            fps: 10,
+            qrbox: { width: 250, height: 250 },
+            rememberLastUsedCamera: true,
+            showTorchButtonIfSupported: true,
+            aspectRatio: 1.0,
+            videoConstraints: {
+              facingMode: "environment" // Força câmera traseira
+            }
+          },
+          false
+        );
+
+        scannerRef.current = scanner;
+
+        const onScanSuccess = (decodedText: string) => {
+          try {
+            const data = JSON.parse(decodedText);
+            handlePonto(data);
+            scanner.clear();
+            setScanned(true);
+          } catch (e) {
+            alert("QR Code inválido");
+          }
+        };
+
+        const onScanError = (error: any) => {
+          console.debug('Erro de scan:', error);
+          if (error?.includes('NotFoundException')) {
+            setCameraError('Câmera não encontrada. Verifique as permissões.');
+          } else if (error?.includes('NotAllowedError')) {
+            setCameraError('Acesso à câmera negado. Permita o acesso nas configurações.');
+          }
+        };
+
+        scanner.render(onScanSuccess, onScanError);
+      } catch (err) {
+        setCameraError('Erro ao iniciar câmera');
+      }
     }
+
     return () => {
       if (scannerRef.current) {
-        scannerRef.current.clear().catch(console.error);
+        try {
+          scannerRef.current.clear();
+        } catch (err) {
+          console.error('Erro ao limpar scanner:', err);
+        }
       }
     };
-  }, [step, scanned]);
-
-  const onScanSuccess = (decodedText: string) => {
-    try {
-      const data = JSON.parse(decodedText);
-      handlePonto(data);
-      if (scannerRef.current) scannerRef.current.clear();
-      setScanned(true);
-    } catch (e) {
-      alert("QR Code inválido");
-    }
-  };
+  }, [step, scanned, cameraError]);
 
   const handlePonto = async (qrData: any) => {
     setLoading(true);
     try {
-      await new Promise(r => setTimeout(r, 1500));
-      const isEntrada = new Date().getHours() < 12;
+      const API_URL = import.meta.env.VITE_API_URL || 'https://uniceplac-point-backend.onrender.com';
       
-      setResult({ 
-        message: isEntrada ? 'Entrada registrada com sucesso!' : 'Saída registrada com sucesso!',
-        horas_concluidas: isEntrada ? 45 : 51,
-        horas_alvo: 120,
-        type: isEntrada ? 'entrada' : 'saida'
+      const response = await fetch(`${API_URL}/api/bater-ponto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          aluno_matricula: studentData.matricula,
+          aluno_nome: studentData.nome,
+          staff_id: qrData.staff_id,
+          setor: qrData.setor || qrData.especialidade,
+          hospital: qrData.hospital,
+          token_seguranca_qr: qrData.token,
+          is_sos: false
+        })
       });
+      
+      const data = await response.json();
+      setResult(data);
     } catch (err) {
-      setResult({ error: 'Erro de conexão' });
+      setResult({ error: 'Erro de conexão com o servidor' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const solicitarPermissao = () => {
+    setCameraError(null);
+    setScanned(false);
+    // Recarregar o scanner
+    if (containerRef.current) {
+      containerRef.current.innerHTML = '';
     }
   };
 
@@ -1994,7 +2051,7 @@ function StudentView({ onBack, studentData, setStudentData }: any) {
         <Card className="p-6">
           <form onSubmit={(e) => { 
             e.preventDefault(); 
-            const f = new FormData(e.target as any); 
+            const f = new FormData(e.target as HTMLFormElement); 
             setStudentData(Object.fromEntries(f)); 
             setStep('SCAN'); 
           }} className="space-y-4">
@@ -2008,61 +2065,96 @@ function StudentView({ onBack, studentData, setStudentData }: any) {
     );
   }
 
+  if (cameraError) {
+    return (
+      <div className="max-w-md mx-auto p-6">
+        <header className="flex justify-between items-center mb-6">
+          <Logo size={32} />
+          <h1 className="text-lg font-bold text-uniceplac-green">Erro na Câmera</h1>
+          <Button onClick={onBack} variant="outline" className="p-2">
+            <LogOut size={18} />
+          </Button>
+        </header>
+        
+        <Card className="p-6 text-center">
+          <Camera size={48} className="mx-auto text-red-500 mb-4" />
+          <h2 className="text-xl font-bold text-red-600 mb-2">Câmera não acessível</h2>
+          <p className="text-zinc-600 mb-4">{cameraError}</p>
+          <p className="text-sm text-zinc-500 mb-4">
+            Para permitir:
+            <br />1. Clique no ícone de cadeado na barra de endereços
+            <br />2. Selecione "Permitir" para a câmera
+            <br />3. Recarregue a página
+          </p>
+          <div className="space-y-3">
+            <Button onClick={() => window.location.reload()} className="w-full">
+              Recarregar Página
+            </Button>
+            <Button onClick={solicitarPermissao} className="w-full">
+              Tentar Novamente
+            </Button>
+            <Button variant="outline" onClick={onBack} className="w-full">
+              Voltar ao Login
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-md mx-auto p-6 space-y-6">
-      <header className="flex justify-between items-center">
+    <div className="max-w-md mx-auto p-6">
+      <header className="flex justify-between items-center mb-6">
         <Logo size={32} />
-        <h1 className="text-lg font-bold text-uniceplac-green">Scanner</h1>
-        <Button onClick={onBack} variant="outline" className="p-2">Sair</Button>
+        <h1 className="text-lg font-bold text-uniceplac-green">Registrar Ponto</h1>
+        <Button onClick={onBack} variant="outline" className="p-2">
+          <LogOut size={18} />
+        </Button>
       </header>
       
-      {!scanned ? (
+      <div className="mb-4 p-4 bg-uniceplac-green/5 rounded-lg text-center">
+        <p className="font-medium text-uniceplac-green">{studentData.nome}</p>
+        <p className="text-sm text-zinc-500">Matrícula: {studentData.matricula}</p>
+      </div>
+
+      {!result ? (
         <div>
-          <div id="reader" className="aspect-square bg-zinc-100 rounded-3xl border-4 border-white shadow-xl"></div>
-          <p className="text-center text-zinc-500 mt-4">Aponte para o QR Code do Staff</p>
-          <p className="text-center text-xs text-zinc-400 mt-2">
-            Aluno: {studentData?.nome} ({studentData?.matricula})
+          <div 
+            id="reader" 
+            ref={containerRef}
+            className="aspect-square bg-zinc-900 rounded-2xl overflow-hidden border-4 border-white shadow-xl"
+            style={{ minHeight: '300px', width: '100%' }}
+          />
+          <p className="text-center text-zinc-500 mt-4">
+            {loading ? 'Processando...' : 'Aponte para o QR Code do Staff'}
           </p>
-        </div>
-      ) : loading ? (
-        <div className="text-center py-12">
-          <Loader2 className="animate-spin mx-auto text-uniceplac-green" size={48} />
-          <p className="mt-4 text-zinc-600">Registrando ponto...</p>
         </div>
       ) : result?.error ? (
         <div className="text-center py-8">
           <AlertCircle className="mx-auto text-red-500" size={48} />
           <p className="mt-4 text-red-600 font-medium">{result.error}</p>
-          <Button onClick={() => setScanned(false)} className="mt-6 w-full">
+          <Button onClick={() => setResult(null)} className="mt-6 w-full">
             Tentar Novamente
           </Button>
         </div>
       ) : (
         <div className="text-center py-8">
           <CheckCircle2 className="mx-auto text-emerald-500" size={48} />
-          <p className="mt-4 text-emerald-600 font-bold text-lg">Ponto Confirmado!</p>
+          <p className="mt-4 text-emerald-600 font-bold text-lg">
+            {result?.tipo === 'SAIDA' ? 'Saída Registrada!' : 'Entrada Registrada!'}
+          </p>
           <p className="text-sm text-zinc-600 mt-2">{result?.message}</p>
-          
-          <div className="mt-6 p-4 bg-zinc-50 rounded-xl">
-            <div className="flex justify-between text-sm">
-              <span className="text-zinc-500">Horas cumpridas:</span>
-              <span className="font-bold">{result?.horas_concluidas}h</span>
-            </div>
-            <div className="flex justify-between text-sm mt-2">
-              <span className="text-zinc-500">Meta total:</span>
-              <span className="font-bold">{result?.horas_alvo}h</span>
-            </div>
-            <div className="w-full bg-zinc-200 h-2 rounded-full mt-3">
-              <div 
-                className="bg-uniceplac-green h-2 rounded-full" 
-                style={{ width: `${(result?.horas_concluidas / result?.horas_alvo) * 100}%` }}
-              ></div>
-            </div>
+          {result?.horas && (
+            <p className="text-sm font-bold text-uniceplac-green mt-2">Total: {result.horas}h</p>
+          )}
+          <div className="flex gap-3 mt-6">
+            <Button onClick={() => setResult(null)} className="flex-1">
+              Novo Registro
+            </Button>
+            <Button variant="outline" onClick={onBack} className="flex-1">
+              Sair
+            </Button>
           </div>
-          
-          <Button onClick={() => setScanned(false)} className="mt-6 w-full">
-            Novo Registro
-          </Button>
         </div>
       )}
     </div>
