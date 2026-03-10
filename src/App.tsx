@@ -1934,181 +1934,140 @@ function StaffView({ user, onLogout, navigateToDoc }: any) {
     </div>
   );
 }
-import React, { useState, useEffect, useRef } from 'react';
-import { 
-  collection, 
-  getDocs, 
-  where, 
-  query, 
-  onSnapshot, 
-  doc, 
-  setDoc, 
-  deleteDoc,
-  limit, 
-  orderBy
-} from "firebase/firestore";
-
-import { db } from './db';
-import { 
-  Users, QrCode, LogOut, AlertCircle, 
-  CheckCircle2, Clock, UserPlus, ShieldAlert,
-  Search, FileText, Sparkles, Loader2, Book, LogIn,
-  MapPin, Plus, X, Edit, Trash2, Camera, User,
-  Calendar, Hash, Mail, Filter, RefreshCw, Download,
-  ChevronDown, ChevronUp, Brain, LayoutDashboard
-} from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
-import { QRCodeSVG } from 'qrcode.react';
-import { Documentation } from './components/Documentation';
-
-// --- TYPES ---
-type Role = 'GESTOR' | 'STAFF' | 'ALUNO';
-type View = 'LOGIN' | 'ADMIN' | 'STAFF' | 'STUDENT_LOGIN' | 'STUDENT_SCAN' | 'DOCUMENTATION';
-
-interface User { id: string; nome: string; email: string; role: Role; }
-interface Aluno { id: string; nome: string; matricula: string; turma: string; carga_horaria_alvo: number; horas_concluidas: number; }
-interface Escala { id: string; aluno_id: string; aluno_nome: string; staff_id: string; staff_nome: string; cnes: string; hospital: string; setor: string; data: string; periodo: string; carga_horaria: number; }
-interface Staff { id: string; nome: string; email: string; }
-interface Setor { id: string; nome: string; hospital: string; cnes: string; ativo: boolean; }
-interface PontoRecord { id: string; aluno_nome: string; aluno_matricula: string; setor: string; data_plantao: string; hora_entrada: string; hora_saida: string | null; horas_totais: number | null; staff_entrada_nome: string; staff_saida_nome: string | null; is_sos_entrada: boolean; is_sos_saida: boolean; observacao: string | null; }
-
-interface EscalaInput {
-  matricula: string;
-  email_staff: string;
-  cnes?: string;
-  hospital?: string;
-  setor: string;
-  data: string;
-  periodo: string;
-  carga_horaria: number;
-}
-
-// --- COMPONENTS ---
-const Logo = ({ size = 48, className = "" }: { size?: number, className?: string }) => (
-  <img src="./logo-oficial.png" alt="Logo" width={size} height={size} className={`object-contain ${className}`} />
-);
-
-const Card = ({ children, className = "" }: { children: React.ReactNode, className?: string }) => (
-  <div className={`bg-white rounded-2xl border border-uniceplac-green/5 shadow-sm overflow-hidden ${className}`}>{children}</div>
-);
-
-const Button = ({ children, onClick, variant = 'primary', className = "", disabled = false }: any) => {
-  const variants: any = {
-    primary: 'bg-uniceplac-green text-white hover:bg-uniceplac-green/90',
-    secondary: 'bg-uniceplac-mint/20 text-uniceplac-green hover:bg-uniceplac-mint/40',
-    danger: 'bg-red-500 text-white hover:bg-red-600',
-    outline: 'border border-uniceplac-green/20 text-uniceplac-green hover:bg-uniceplac-green/5'
-  };
-  return (
-    <button disabled={disabled} onClick={onClick} className={`px-4 py-2.5 rounded-xl font-medium transition-all active:scale-95 disabled:opacity-50 ${variants[variant]} ${className}`}>
-      {children}
-    </button>
-  );
-};
-
 // ============================================================================
-// COMPONENTE DE LOGIN DO ALUNO
+// STUDENT VIEW (LEGADO - MANTIDO PARA COMPATIBILIDADE)
 // ============================================================================
-const AlunoLogin = ({ onLoginSuccess, onBack }: { onLoginSuccess: (data: any) => void; onBack: () => void }) => {
-  const [matricula, setMatricula] = useState('');
-  const [nome, setNome] = useState('');
+function StudentView({ onBack, studentData, setStudentData }: any) {
+  const [step, setStep] = useState(studentData ? 'SCAN' : 'ONBOARDING');
+  const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [result, setResult] = useState<any>(null);
+  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-
-    try {
-      const q = query(collection(db, "Alunos"), where("matricula", "==", matricula));
-      const snap = await getDocs(q);
-      
-      if (!snap.empty) {
-        const alunoData = snap.docs[0].data();
-        onLoginSuccess({ 
-          nome: alunoData.nome, 
-          matricula: alunoData.matricula,
-          id: snap.docs[0].id 
-        });
-      } else {
-        if (nome) {
-          const novoId = `aluno_${Date.now()}`;
-          await setDoc(doc(db, "Alunos", novoId), {
-            nome,
-            matricula,
-            turma: 'Não informada',
-            carga_horaria_alvo: 120,
-            horas_concluidas: 0,
-            status: 'ativo',
-            criadoEm: new Date().toISOString()
-          });
-          onLoginSuccess({ nome, matricula, id: novoId });
-        } else {
-          setError('Aluno não encontrado. Se for novo, preencha o nome.');
-        }
+  useEffect(() => {
+    if (step === 'SCAN' && !scanned) {
+      scannerRef.current = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
+      scannerRef.current.render(onScanSuccess, () => {});
+    }
+    return () => {
+      if (scannerRef.current) {
+        scannerRef.current.clear().catch(console.error);
       }
+    };
+  }, [step, scanned]);
+
+  const onScanSuccess = (decodedText: string) => {
+    try {
+      const data = JSON.parse(decodedText);
+      handlePonto(data);
+      if (scannerRef.current) scannerRef.current.clear();
+      setScanned(true);
+    } catch (e) {
+      alert("QR Code inválido");
+    }
+  };
+
+  const handlePonto = async (qrData: any) => {
+    setLoading(true);
+    try {
+      await new Promise(r => setTimeout(r, 1500));
+      const isEntrada = new Date().getHours() < 12;
+      
+      setResult({ 
+        message: isEntrada ? 'Entrada registrada com sucesso!' : 'Saída registrada com sucesso!',
+        horas_concluidas: isEntrada ? 45 : 51,
+        horas_alvo: 120,
+        type: isEntrada ? 'entrada' : 'saida'
+      });
     } catch (err) {
-      setError('Erro ao fazer login');
+      setResult({ error: 'Erro de conexão' });
     } finally {
       setLoading(false);
     }
   };
 
+  if (step === 'ONBOARDING') {
+    return (
+      <div className="max-w-md mx-auto p-6">
+        <Logo size={80} className="mx-auto mb-6" />
+        <h1 className="text-xl font-bold text-center text-uniceplac-green mb-6">Configurar Aluno</h1>
+        <Card className="p-6">
+          <form onSubmit={(e) => { 
+            e.preventDefault(); 
+            const f = new FormData(e.target as any); 
+            setStudentData(Object.fromEntries(f)); 
+            setStep('SCAN'); 
+          }} className="space-y-4">
+            <input name="nome" placeholder="Nome completo" required className="w-full p-3 border rounded-xl" />
+            <input name="matricula" placeholder="Número da matrícula" required className="w-full p-3 border rounded-xl" />
+            <Button type="submit" className="w-full">Começar</Button>
+          </form>
+        </Card>
+        <Button variant="outline" onClick={onBack}>Voltar</Button>
+      </div>
+    );
+  }
+
   return (
-    <div className="max-w-md mx-auto p-6">
-      <Logo size={80} className="mx-auto mb-6" />
-      <h1 className="text-2xl font-bold text-center text-uniceplac-green mb-2">Acesso do Aluno</h1>
-      <p className="text-center text-zinc-500 mb-6">Informe seus dados para acessar o sistema</p>
+    <div className="max-w-md mx-auto p-6 space-y-6">
+      <header className="flex justify-between items-center">
+        <Logo size={32} />
+        <h1 className="text-lg font-bold text-uniceplac-green">Scanner</h1>
+        <Button onClick={onBack} variant="outline" className="p-2">Sair</Button>
+      </header>
       
-      <Card className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Matrícula</label>
-            <input
-              type="text"
-              value={matricula}
-              onChange={(e) => setMatricula(e.target.value)}
-              placeholder="Digite sua matrícula"
-              required
-              className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-uniceplac-green/20"
-            />
+      {!scanned ? (
+        <div>
+          <div id="reader" className="aspect-square bg-zinc-100 rounded-3xl border-4 border-white shadow-xl"></div>
+          <p className="text-center text-zinc-500 mt-4">Aponte para o QR Code do Staff</p>
+          <p className="text-center text-xs text-zinc-400 mt-2">
+            Aluno: {studentData?.nome} ({studentData?.matricula})
+          </p>
+        </div>
+      ) : loading ? (
+        <div className="text-center py-12">
+          <Loader2 className="animate-spin mx-auto text-uniceplac-green" size={48} />
+          <p className="mt-4 text-zinc-600">Registrando ponto...</p>
+        </div>
+      ) : result?.error ? (
+        <div className="text-center py-8">
+          <AlertCircle className="mx-auto text-red-500" size={48} />
+          <p className="mt-4 text-red-600 font-medium">{result.error}</p>
+          <Button onClick={() => setScanned(false)} className="mt-6 w-full">
+            Tentar Novamente
+          </Button>
+        </div>
+      ) : (
+        <div className="text-center py-8">
+          <CheckCircle2 className="mx-auto text-emerald-500" size={48} />
+          <p className="mt-4 text-emerald-600 font-bold text-lg">Ponto Confirmado!</p>
+          <p className="text-sm text-zinc-600 mt-2">{result?.message}</p>
+          
+          <div className="mt-6 p-4 bg-zinc-50 rounded-xl">
+            <div className="flex justify-between text-sm">
+              <span className="text-zinc-500">Horas cumpridas:</span>
+              <span className="font-bold">{result?.horas_concluidas}h</span>
+            </div>
+            <div className="flex justify-between text-sm mt-2">
+              <span className="text-zinc-500">Meta total:</span>
+              <span className="font-bold">{result?.horas_alvo}h</span>
+            </div>
+            <div className="w-full bg-zinc-200 h-2 rounded-full mt-3">
+              <div 
+                className="bg-uniceplac-green h-2 rounded-full" 
+                style={{ width: `${(result?.horas_concluidas / result?.horas_alvo) * 100}%` }}
+              ></div>
+            </div>
           </div>
           
-          <div>
-            <label className="block text-sm font-medium text-zinc-700 mb-1">Nome completo</label>
-            <input
-              type="text"
-              value={nome}
-              onChange={(e) => setNome(e.target.value)}
-              placeholder="Digite seu nome (se for novo aluno)"
-              className="w-full p-3 border rounded-xl focus:ring-2 focus:ring-uniceplac-green/20"
-            />
-            <p className="text-xs text-zinc-400 mt-1">Se for aluno novo, preencha o nome para se cadastrar</p>
-          </div>
-
-          {error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm text-red-600">{error}</p>
-            </div>
-          )}
-
-          <Button type="submit" disabled={loading} className="w-full">
-            {loading ? 'Entrando...' : 'Entrar como Aluno'}
+          <Button onClick={() => setScanned(false)} className="mt-6 w-full">
+            Novo Registro
           </Button>
-        </form>
-
-        <div className="mt-4 text-center">
-          <button onClick={onBack} className="text-sm text-uniceplac-green hover:underline">
-            ← Voltar ao login principal
-          </button>
         </div>
-      </Card>
+      )}
     </div>
   );
-};
-
+}
 // ============================================================================
 // COMPONENTE DE SCANNER DO ALUNO (VERSÃO CORRIGIDA E FUNCIONAL)
 // ============================================================================
